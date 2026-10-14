@@ -291,4 +291,3 @@ def test_create_category_unknown_parent_id_returns_404(httpx_client: httpx.Clien
     )
     assert response.status_code == 404
     assert response.json() == {"error": "Parent category not found."}
-
