@@ -132,3 +132,31 @@ async def test_validation_errors(client: AsyncClient) -> None:
     invalid_list_body = cast(dict[str, object], invalid_list.json())
     assert invalid_list_body["message"] == "Validation failed"
     assert isinstance(invalid_list_body["detail"], list)
+
+
+@pytest.mark.asyncio
+async def test_task_listing_query_parameter_bounds(client: AsyncClient) -> None:
+    for invalid_params in [
+        {"limit": 0},
+        {"limit": 101},
+        {"priority": 0},
+        {"priority": 6},
+    ]:
+        response = await client.get("/tasks", params=invalid_params)
+        assert response.status_code == 422
+        body = cast(dict[str, object], response.json())
+        assert body["message"] == "Validation failed"
+        assert isinstance(body["detail"], list)
+
+    for valid_params in [
+        {"limit": 1},
+        {"limit": 100},
+        {"priority": 1},
+        {"priority": 5},
+    ]:
+        valid_response = await client.get("/tasks", params=valid_params)
+        assert valid_response.status_code == 200
+        body = cast(dict[str, object], valid_response.json())
+        assert "items" in body
+        assert "total" in body
+
