@@ -57,7 +57,9 @@ class MissingDistributionsTests(unittest.TestCase):
                     return mock.MagicMock()
                 raise metadata.PackageNotFoundError(name)
 
-            with mock.patch.object(example_requirements.metadata, "distribution", side_effect=fake_distribution):
+            with mock.patch.object(
+                example_requirements.metadata, "distribution", side_effect=fake_distribution
+            ):
                 missing = example_requirements.missing_distributions([root])
 
             expected_path = req_file.as_posix()
