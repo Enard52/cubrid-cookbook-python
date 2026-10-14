@@ -164,4 +164,3 @@ async def test_empty_partial_task_update_preserves_existing_fields(client: Async
     assert fetched["description"] == create_payload["description"]
     assert fetched["completed"] == create_payload["completed"]
     assert fetched["priority"] == create_payload["priority"]
-
