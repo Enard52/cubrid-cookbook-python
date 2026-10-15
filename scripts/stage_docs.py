@@ -22,6 +22,8 @@ inline code spans are left untouched. Run it before ``mkdocs build --strict``
 'support-matrix.md'
 >>> rewrite_target("pitfalls/#top", "README.md", "docs/catalog.md", REPO_ROOT)
 'pitfalls.md#top'
+>>> rewrite_target("SUPPORT_MATRIX.md?view=raw#versions", "README.md", "docs/catalog.md", REPO_ROOT)
+'support-matrix.md?view=raw#versions'
 >>> rewrite_target("./connect/", "fundamentals/README.md", "docs/fundamentals.md", REPO_ROOT)
 'https://github.com/cubrid-lab/cubrid-cookbook-python/tree/main/fundamentals/connect'
 >>> rewrite_target("https://example.com/x", "README.md", "docs/catalog.md", REPO_ROOT)
@@ -93,11 +95,15 @@ def _is_external(target: str) -> bool:
 
 
 def _split(target: str) -> tuple[str, str]:
-    for sep in ("#", "?"):
-        if sep in target:
-            path, rest = target.split(sep, 1)
-            return path, sep + rest
-    return target, ""
+    # Cut at whichever delimiter comes first. Testing "#" before "?" made a
+    # target such as "SUPPORT_MATRIX.md?view=raw#versions" keep its query in the
+    # path, so the repository existence check looked for a file named
+    # "SUPPORT_MATRIX.md?view=raw" and staging reported a broken link.
+    positions = [index for index in (target.find("#"), target.find("?")) if index != -1]
+    if not positions:
+        return target, ""
+    index = min(positions)
+    return target[:index], target[index:]
 
 
 def _page_for(resolved: str, root: Path) -> str | None:

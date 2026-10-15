@@ -89,6 +89,23 @@ class RewriteTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("templates/error-handling", errors[0])
 
+    def test_query_and_fragment_after_a_staged_file_keep_their_order(self) -> None:
+        # A target with both delimiters must split at the first one, otherwise
+        # the query stays in the path and the existence check fails (#361).
+        text, errors = self.rewrite("[m](SUPPORT_MATRIX.md?view=raw#versions)\n")
+        self.assertEqual(errors, [])
+        self.assertEqual(text, "[m](support-matrix.md?view=raw#versions)\n")
+
+    def test_query_and_fragment_after_a_directory_keep_their_order(self) -> None:
+        text, errors = self.rewrite("[p](pitfalls/?v=2#top)\n")
+        self.assertEqual(errors, [])
+        self.assertEqual(text, "[p](pitfalls.md?v=2#top)\n")
+
+    def test_missing_target_with_query_and_fragment_is_still_reported(self) -> None:
+        _, errors = self.rewrite("[gone](templates/error-handling/?v=2#top)\n")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("points to missing 'templates/error-handling'", errors[0])
+
     def test_stage_writes_pages_without_touching_sources(self) -> None:
         readme = _write(self.root, "README.md", "[m](SUPPORT_MATRIX.md)\n")
         before = readme.read_bytes()
