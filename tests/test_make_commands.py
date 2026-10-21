@@ -490,6 +490,84 @@ class RunExampleTests(OrphanChecks):
             self.assertEqual(module.main(["--timeout", "0.25", "--", "true"]), 0)
         run.assert_called_once_with(["true"], 0.25)
 
+    # --- #365: plain CLI misuse (zero / negative / missing --timeout, no command) ---
+
+    #: (argv in front of the child, the usage text the parser must print on POSIX)
+    #: Every case here has to be refused before spawning, so none of them is a
+    #: valid invocation: a well-formed timeout with a command would run the child.
+    REJECTED = (
+        (["--timeout", "0"], "finite positive --timeout"),
+        (["--timeout", "-1"], "finite positive --timeout"),
+        (["--timeout", "0.0"], "finite positive --timeout"),
+        (["--timeout", "-0.5"], "finite positive --timeout"),
+        ([], "the following arguments are required: --timeout"),
+    )
+
+    def cli_child(self) -> tuple[Path, str]:
+        """A child that leaves a marker file behind if the runner ever spawns it."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        marker = Path(directory.name) / "child-started"
+        code = f"import time; open({str(marker)!r}, 'w').write('x'); time.sleep(60)"
+        return marker, code
+
+    def test_nonpositive_and_missing_arguments_exit_2_without_spawning(self) -> None:
+        marker, code = self.cli_child()
+        for arguments, expected in self.REJECTED:
+            with self.subTest(arguments=arguments):
+                marker.unlink(missing_ok=True)
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "scripts/run_example.py"),
+                        *arguments,
+                        "--",
+                        sys.executable,
+                        "-c",
+                        code,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertFalse(
+                    marker.exists(),
+                    f"{arguments} spawned the child: {result.stdout}{result.stderr}",
+                )
+                if os.name == "posix":
+                    self.assertIn(expected, result.stderr)
+
+    def test_cli_validation_reaches_the_parser_before_run_on_a_posix_host(self) -> None:
+        # The subprocess test above can only check the usage wording where the
+        # host is POSIX, because main() returns early elsewhere. These are the
+        # same five cases asserted on every platform, in the style of
+        # test_non_finite_timeout_is_a_usage_error_before_any_command_runs.
+        module = self._load_run_example()
+        cases = (
+            *(
+                ([*arguments, "--", "never-executed"], expected)
+                for arguments, expected in self.REJECTED[:-1]
+            ),
+            (["--timeout", "5", "--"], "finite positive --timeout"),
+            (["never-executed"], "the following arguments are required: --timeout"),
+        )
+        for argv, expected in cases:
+            with self.subTest(argv=argv):
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(module.os, "name", "posix"),
+                    mock.patch.object(module, "run") as run,
+                    mock.patch.object(module.subprocess, "Popen") as popen,
+                    contextlib.redirect_stderr(stderr),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    module.main(argv)
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn(expected, stderr.getvalue())
+                run.assert_not_called()
+                popen.assert_not_called()
+
 
 class OfflineWorkflowTests(unittest.TestCase):
     def test_python_compatibility_is_a_small_classified_live_matrix(self) -> None:
